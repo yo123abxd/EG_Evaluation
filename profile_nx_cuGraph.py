@@ -3,18 +3,15 @@ import nx_cugraph as nxcg
 from benchmark import benchmark
 import numpy as np
 from glob import glob
+from datasets import files, files_BC, files_Dijkstra, files_k_core
 
 if __name__ == "__main__":
-    directed_filedir  = "datasets/directed"
-    undirected_filedir  = "datasets/undirected"
     n = 5
-
-    files = glob(f"{directed_filedir}/*") + glob(f"{undirected_filedir}/*")
 
     for f in files:
         print(f"EasyGraph curr file: {f}")
 
-        print("Profiling loading")
+        print("Profiling loading", flush=True)
         print("========================================")
 
         g=None
@@ -31,26 +28,29 @@ if __name__ == "__main__":
         g=nxcg.from_networkx(g)
 
 
-        print("Profiling betweenness centrality")
-        print("========================================")
+        if f in files_BC:
+            print(f"Profiling betweenness centrality f: {f}", flush=True)
+            print("========================================")
 
-        benchmark('nx.betweenness_centrality(g)', globals=globals(), n=n)
-
-
-
-        print("Profiling SSSP")
-        print("========================================")
-
-        # shortest_path_length(G, source=None, target=None, weight=None, method='dijkstra')
-        # the nx won't calculate shortest_path_length unless converted to dict
-        benchmark('dict(nx.shortest_path_length(g))', globals=globals(), n=n)
+            benchmark('nx.betweenness_centrality(g)', globals=globals(), n=n)
 
 
 
-        print("Profiling k_core")
-        print("========================================")
+        if f in files_Dijkstra:
+            print(f"Profiling SSSP f: {f}", flush=True)
+            print("========================================")
 
-        g = nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.Graph))
-        benchmark('nx.core_number(g)', globals=globals(), n=n)
+            # shortest_path_length(G, source=None, target=None, weight=None, method='dijkstra')
+            # the nx won't calculate shortest_path_length unless converted to dict
+            benchmark('dict(nx.shortest_path_length(g))', globals=globals(), n=n)
+
+
+
+        if f in files_k_core:
+            print(f"Profiling k_core f: {f}", flush=True)
+            print("========================================")
+
+            g = nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.Graph))
+            benchmark('nx.core_number(g)', globals=globals(), n=n)
 
         
