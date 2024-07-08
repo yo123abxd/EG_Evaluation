@@ -27,21 +27,21 @@ if __name__ == "__main__":
 
         eg_g_nodes = list(g.nodes)
 
-        if f in files_BC:
+        if f.split("/")[-1] in files_BC:
             print(f"Profiling betweenness centrality f: {f}", flush=True)
             print("========================================")
 
             benchmark('eg.betweenness_centrality(g)', globals=globals(), n=n)
 
 
-        if f in files_Dijkstra:
+        if f.split("/")[-1] in files_Dijkstra:
             print(f"Profiling SSSP f: {f}", flush=True)
             print("========================================")
 
             benchmark('eg.multi_source_dijkstra(g, sources=eg_g_nodes)', globals=globals(), n=n)
 
 
-        if f in files_k_core:
+        if f.split("/")[-1] in files_k_core:
             print(f"Profiling k_core f: {f}", flush=True)
             print("========================================")
 
