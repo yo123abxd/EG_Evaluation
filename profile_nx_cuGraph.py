@@ -51,7 +51,9 @@ if __name__ == "__main__":
             print(f"Profiling k_core f: {f}", flush=True)
             print("========================================")
 
-            g = nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.Graph))
+            g = nx.read_edgelist(f, create_using=nx.Graph)
+            g.remove_edges_from(nx.selfloop_edges(g))
+            g = nxcg.from_networkx(g)
             benchmark('nx.core_number(g)', globals=globals(), n=n)
 
         
