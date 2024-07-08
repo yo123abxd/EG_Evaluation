@@ -24,6 +24,7 @@ if __name__ == "__main__":
             benchmark('nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.DiGraph))', globals=globals(), n=n)
             g = nx.read_edgelist(f, create_using=nx.DiGraph)
 
+        g.remove_edges_from(nx.selfloop_edges(g))
         eg_g_nodes = list(g.nodes())
         g=nxcg.from_networkx(g)
 
