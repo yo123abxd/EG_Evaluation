@@ -1,13 +1,13 @@
 import networkx as nx
+import nx_cugraph as nxcg
 from benchmark import benchmark
-import random
 import numpy as np
 from glob import glob
 
 if __name__ == "__main__":
     directed_filedir  = "datasets/directed"
     undirected_filedir  = "datasets/undirected"
-    n = 10
+    n = 5
 
     files = glob(f"{directed_filedir}/*") + glob(f"{undirected_filedir}/*")
 
@@ -20,15 +20,15 @@ if __name__ == "__main__":
         g=None
 
         if "undirected" in f:
-            benchmark('g = nx.read_edgelist(f, create_using=nx.Graph)', globals=globals(), n=n)
+            benchmark('nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.Graph))', globals=globals(), n=n)
             g = nx.read_edgelist(f, create_using=nx.Graph)
         else:
             #directed
-            benchmark('g = nx.read_edgelist(f, create_using=nx.DiGraph)', globals=globals(), n=n)
+            benchmark('nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.DiGraph))', globals=globals(), n=n)
             g = nx.read_edgelist(f, create_using=nx.DiGraph)
 
-
         eg_g_nodes = list(g.nodes())
+        g=nxcg.from_networkx(g)
 
 
         print("Profiling betweenness centrality")
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         print("Profiling k_core")
         print("========================================")
 
-        g = nx.read_edgelist(f, create_using=nx.Graph)
+        g = nxcg.from_networkx(nx.read_edgelist(f, create_using=nx.Graph))
         benchmark('nx.core_number(g)', globals=globals(), n=n)
 
         

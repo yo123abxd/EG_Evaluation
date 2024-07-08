@@ -1,13 +1,12 @@
 import igraph as ig
 from benchmark import benchmark
-import random
 import numpy as np
 from glob import glob
 
 if __name__ == "__main__":
     directed_filedir  = "datasets/directed"
     undirected_filedir  = "datasets/undirected"
-    n = 10
+    n = 5
 
     files = glob(f"{directed_filedir}/*") + glob(f"{undirected_filedir}/*")
 
