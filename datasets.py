@@ -16,11 +16,11 @@ files_Dijkstra = set([
 
 
 files_k_core = set([
+    "soc-Epinions1.txt",
     "amazon0601.txt",
     "email-EuAll.txt",
     "ER-100k.txt",
     "ER-500k.txt",
-    "wiki-Talk.txt",
     "com-youtube.ungraph.txt",
 ])
 

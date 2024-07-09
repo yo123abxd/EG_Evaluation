@@ -5,8 +5,6 @@ from glob import glob
 from datasets import files, files_BC, files_Dijkstra, files_k_core
 
 if __name__ == "__main__":
-    n = 5
-
     for f in files:
         print(f"igraph curr file: {f}")
 
@@ -17,7 +15,7 @@ if __name__ == "__main__":
 
         directed = False if "undirected" in f else True
 
-        benchmark("ig.Graph.Read_Edgelist(f,directed)", globals=globals(), n=n)
+        benchmark("ig.Graph.Read_Edgelist(f,directed)", globals=globals(), n=5)
         g = ig.Graph.Read_Edgelist(f,directed)
 
 
@@ -31,20 +29,20 @@ if __name__ == "__main__":
             print(f"Profiling betweenness centrality f: {f}", flush=True)
             print("========================================")
 
-            benchmark('g.betweenness(directed=directed)', globals=globals(), n=n)
+            benchmark('g.betweenness(directed=directed)', globals=globals(), n=5)
 
 
         if f.split("/")[-1] in files_Dijkstra:
             print(f"Profiling SSSP f: {f}", flush=True)
             print("========================================")
 
-            benchmark("g.distances(source = ig_g_nodes)", globals=globals(), n=n)
+            benchmark("g.distances(source = ig_g_nodes)", globals=globals(), n=5)
 
         if f.split("/")[-1] in files_k_core:
             print(f"Profiling k_core f: {f}", flush=True)
             print("========================================")
 
             g = ig.Graph.Read_Edgelist(f,False)
-            benchmark('g.coreness()', globals=globals(), n=n)
+            benchmark('g.coreness()', globals=globals(), n=100)
 
         

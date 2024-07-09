@@ -14,6 +14,7 @@ for i in range(5):
         r = subprocess.run(["./sssp", "-m", f], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print(f"SSSP ; file: {f} ; r code: {r.returncode} ; out: {r.stdout.decode('utf-8')}")
 
+for i in range(100):
     for f in kcore_files:
         r = subprocess.run(["./kcore", f], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print(f"kcore ; file: {f} ; r code: {r.returncode} ; out: {r.stdout.decode('utf-8')}")

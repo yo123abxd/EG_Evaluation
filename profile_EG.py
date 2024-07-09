@@ -5,8 +5,6 @@ from glob import glob
 from datasets import files, files_BC, files_Dijkstra, files_k_core
 
 if __name__ == "__main__":
-    n = 5
-
     for f in files:
         print(f"EasyGraph curr file: {f}")
 
@@ -15,12 +13,12 @@ if __name__ == "__main__":
 
 
         if "undirected" in f:
-            benchmark('eg.GraphC().add_edges_from_file(f, weighted=False,is_transform=True)', globals=globals(), n=n)
+            benchmark('eg.GraphC().add_edges_from_file(f, weighted=False,is_transform=True)', globals=globals(), n=5)
             g=eg.GraphC()
             g.add_edges_from_file(f, weighted=False, is_transform=True)
         else:
             #directed
-            benchmark('eg.DiGraphC().add_edges_from_file(f, weighted=False,is_transform=True)', globals=globals(), n=n)
+            benchmark('eg.DiGraphC().add_edges_from_file(f, weighted=False,is_transform=True)', globals=globals(), n=5)
             g=eg.DiGraphC()
             g.add_edges_from_file(f, weighted=False, is_transform=True)
 
@@ -31,14 +29,14 @@ if __name__ == "__main__":
             print(f"Profiling betweenness centrality f: {f}", flush=True)
             print("========================================")
 
-            benchmark('eg.betweenness_centrality(g)', globals=globals(), n=n)
+            benchmark('eg.betweenness_centrality(g)', globals=globals(), n=5)
 
 
         if f.split("/")[-1] in files_Dijkstra:
             print(f"Profiling SSSP f: {f}", flush=True)
             print("========================================")
 
-            benchmark('eg.multi_source_dijkstra(g, sources=eg_g_nodes)', globals=globals(), n=n)
+            benchmark('eg.multi_source_dijkstra(g, sources=eg_g_nodes)', globals=globals(), n=5)
 
 
         if f.split("/")[-1] in files_k_core:
@@ -47,4 +45,4 @@ if __name__ == "__main__":
 
             g=eg.GraphC()
             g.add_edges_from_file(f, weighted=False, is_transform=True)
-            benchmark('eg.k_core(g)', globals=globals(), n=n)
+            benchmark('eg.k_core(g)', globals=globals(), n=100)
