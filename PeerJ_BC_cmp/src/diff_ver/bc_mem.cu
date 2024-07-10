@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "common.h"
+#include <iostream>
 
 namespace gpu_easygraph {
 
@@ -23,9 +24,7 @@ static __device__ double atomicAddDouble (
 	return __longlong_as_double(old);
 }
 
-
-
-static __device__ double atomicMinDouble (
+static __device__  double atomicMinDouble (
     _OUT_ double *address, 
     _IN_ double val
 )
@@ -64,7 +63,6 @@ static __global__ void d_calc_min_edge (
 }
 
 
-
 static __global__ void d_dijkstra_bc (
     _IN_ int* d_V,
     _IN_ int* d_E,
@@ -76,6 +74,7 @@ static __global__ void d_dijkstra_bc (
     _BUFFER_ double* d_delta_2D,
     _BUFFER_ int* d_U_2D,
     _BUFFER_ int* d_F_2D,
+    _BUFFER_ int* d_lock_flag_2D,
     _BUFFER_ int* d_st_2D,
     _BUFFER_ int* d_st_idx_2D,
     _IN_ int len_V,
@@ -95,6 +94,7 @@ static __global__ void d_dijkstra_bc (
 
         int* d_U = d_U_2D + blockIdx.x * len_V;
         int* d_F = d_F_2D + blockIdx.x * len_V;
+        int* d_lock_flag = d_lock_flag_2D + blockIdx.x * len_V;
         int* d_st = d_st_2D + blockIdx.x * len_V;
         int* d_st_idx = d_st_idx_2D + blockIdx.x * (len_V + 2);
 
@@ -109,6 +109,7 @@ static __global__ void d_dijkstra_bc (
             d_delta[i] = 0;
 
             d_U[i] = 1;
+            d_lock_flag[i] = 0;
         }
         __syncthreads();
 
@@ -129,6 +130,7 @@ static __global__ void d_dijkstra_bc (
         }
         __syncthreads();
 
+        int needlock = 1;
         while (delta < EG_DOUBLE_INF) {
             for (int j = threadIdx.x; j < len_F * warp_size; j += blockDim.x) {
                 int f = d_F[j / warp_size];
@@ -138,7 +140,20 @@ static __global__ void d_dijkstra_bc (
                 for (int e = j % warp_size; e < edge_end - edge_start; e += warp_size) {
                     int adj = d_E[e + edge_start];
                     double relax_w = dist + d_W[e + edge_start];
-                    atomicMinDouble(d_dist + adj, relax_w);
+                    needlock = 1;
+                    while (needlock) {
+                        if (atomicCAS(d_lock_flag + adj, 0, 1) == 0) {
+                            if (relax_w < d_dist[adj]) {
+                                d_dist[adj] = relax_w;
+                                d_sigma[adj] = 0;
+                            }
+                            if (d_dist[adj] == relax_w) {
+                                d_sigma[adj] += d_sigma[f];
+                            }
+                            atomicExch(d_lock_flag + adj, 0);
+                            needlock = 0;
+                        }
+                    }
                 }
                 __threadfence_block();
             }
@@ -184,28 +199,6 @@ static __global__ void d_dijkstra_bc (
             }
             __syncthreads();
         }
-        // calculate single source shortest path END
-
-        // calculate sigma START
-        for (int curr_lvl = 0; curr_lvl + 1 < len_st_idx; ++curr_lvl) {
-            int lvl_start = d_st_idx[curr_lvl];
-            int lvl_end = d_st_idx[curr_lvl + 1];
-            for (int j = threadIdx.x; j < (lvl_end - lvl_start) * warp_size; j += blockDim.x) {
-                int v = d_st[lvl_start + j / warp_size];
-                double dist_v = d_dist[v];
-                int edge_start = d_V[v];
-                int edge_end = d_V[v + 1];
-                for (int e = j % warp_size; e < edge_end - edge_start; e += warp_size) {
-                    int adj = d_E[e + edge_start];
-                    if (dist_v + d_W[e + edge_start] == d_dist[adj]) {
-                        atomicAddDouble(d_sigma + adj, d_sigma[v]);
-                    }
-                }
-                __threadfence_block();
-            }
-            __syncthreads();
-        }
-        // calculate sigma END
 
         __shared__ int depth, st_start, st_end;
         if (threadIdx.x == 0) {
@@ -248,7 +241,6 @@ static __global__ void d_dijkstra_bc (
                 }
             }
             __syncthreads();
-
 
             if (threadIdx.x == 0) {
                 --depth;
@@ -325,52 +317,66 @@ int cuda_betweenness_centrality (
     int cuda_ret = cudaSuccess;
     int EG_ret = EG_GPU_SUCC;
 
-    int block_size = 256;
-    size_t grid_size = len_V / block_size + (len_V % block_size != 0);
+    int min_edge_block_size;
+    int min_edge_grid_size;
+    int dijkstra_block_size;
+    int dijkstra_grid_size;
+    int rescale_block_size;
+    int rescale_grid_size;
+
+    cudaOccupancyMaxPotentialBlockSize(&min_edge_grid_size, &min_edge_block_size, d_calc_min_edge, 0, 0); 
+    cudaOccupancyMaxPotentialBlockSize(&dijkstra_grid_size, &dijkstra_block_size, d_dijkstra_bc, 0, 0); 
+    cudaOccupancyMaxPotentialBlockSize(&rescale_grid_size, &rescale_block_size, d_rescale, 0, 0); 
 
     double scale = calc_scale(len_V, is_directed, normalized, endpoints);
 
-    int *d_V = NULL, *d_E = NULL, *d_sources= NULL;
+    int *d_V = NULL, *d_E = NULL, *d_sources= NULL, *d_lock_flag_2D = NULL;
     int *d_U_2D = NULL, *d_F_2D = NULL, *d_st_2D = NULL, *d_st_idx_2D = NULL;
     double *d_W = NULL, *d_min_edge = NULL, *d_dist_2D = NULL, 
             *d_sigma_2D = NULL, *d_delta_2D = NULL, *d_BC = NULL;
 
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_V, sizeof(int) * (len_V + 1)));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_V, sizeof(int) * len_V));
     EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_E, sizeof(int) * len_E));
     EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_sources, sizeof(int) * len_sources));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_U_2D, sizeof(int) * grid_size * len_V));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_F_2D, sizeof(int) * grid_size * len_V));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_st_2D, sizeof(int) * grid_size * len_V));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_st_idx_2D, sizeof(int) * grid_size * (len_V + 2)));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_lock_flag_2D, sizeof(int) * dijkstra_grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_U_2D, sizeof(int) * dijkstra_grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_F_2D, sizeof(int) * dijkstra_grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_st_2D, sizeof(int) * dijkstra_grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_st_idx_2D, sizeof(int) * dijkstra_grid_size * (len_V + 2)));
     EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_W, sizeof(double) * len_E));
     EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_min_edge, sizeof(double) * len_V));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_dist_2D, sizeof(double) * grid_size * len_V));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_sigma_2D, sizeof(double) * grid_size * len_V));
-    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_delta_2D, sizeof(double) * grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_dist_2D, sizeof(double) * dijkstra_grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_sigma_2D, sizeof(double) * dijkstra_grid_size * len_V));
+    EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_delta_2D, sizeof(double) * dijkstra_grid_size * len_V));
     EXIT_IF_CUDA_FAILED(cudaMalloc((void**)&d_BC, sizeof(double) * len_V));
 
-    EXIT_IF_CUDA_FAILED(cudaMemcpy(d_V, V, sizeof(int) * (len_V + 1), cudaMemcpyHostToDevice));
+    EXIT_IF_CUDA_FAILED(cudaMemcpy(d_V, V, sizeof(int) * len_V, cudaMemcpyHostToDevice));
     EXIT_IF_CUDA_FAILED(cudaMemcpy(d_E, E, sizeof(int) * len_E, cudaMemcpyHostToDevice));
     EXIT_IF_CUDA_FAILED(cudaMemcpy(d_sources, sources, sizeof(int) * len_sources, cudaMemcpyHostToDevice));
     EXIT_IF_CUDA_FAILED(cudaMemcpy(d_W, W, sizeof(double) * len_E, cudaMemcpyHostToDevice));
 
-    d_calc_min_edge<<<grid_size, block_size>>>(d_V, d_E, d_W, len_V, len_E, d_min_edge);
+    d_calc_min_edge<<<min_edge_grid_size, min_edge_block_size>>>(d_V, d_E, d_W, len_V, len_E, d_min_edge);
 
-    d_dijkstra_bc<<<grid_size, block_size>>>(d_V, d_E, d_W, d_min_edge, d_sources, d_dist_2D, 
-                                            d_sigma_2D, d_delta_2D, d_U_2D, d_F_2D, d_st_2D, 
-                                            d_st_idx_2D, len_V, len_E, len_sources, warp_size,
+    d_dijkstra_bc<<<dijkstra_grid_size, dijkstra_block_size>>>(d_V, d_E, d_W, d_min_edge, d_sources, d_dist_2D, d_sigma_2D, 
+                                            d_delta_2D, d_U_2D, d_F_2D, d_lock_flag_2D, d_st_2D, 
+                                            d_st_idx_2D, len_V, len_E, len_sources, warp_size, 
                                             endpoints, d_BC);
 
     if (scale != 1.0) {
-        d_rescale<<<grid_size, block_size>>>(len_V, scale, d_BC);
+        d_rescale<<<rescale_grid_size, rescale_block_size>>>(len_V, scale, d_BC);
     }
 
     EXIT_IF_CUDA_FAILED(cudaMemcpy(BC, d_BC, sizeof(double) * len_V, cudaMemcpyDeviceToHost));
 
 exit:
+    size_t mem_free = 0, mem_total = 0;
+    cudaMemGetInfo(&mem_free, &mem_total);
+    std::cout << "MEM USAGE: " << mem_total-mem_free << std::endl;
+
     cudaFree(d_V);
     cudaFree(d_E);
     cudaFree(d_sources);
+    cudaFree(d_lock_flag_2D);
     cudaFree(d_U_2D);
     cudaFree(d_F_2D);
     cudaFree(d_st_2D);
