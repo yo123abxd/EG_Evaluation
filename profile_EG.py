@@ -5,6 +5,8 @@ from glob import glob
 from datasets import files, files_BC, files_Dijkstra, files_k_core
 
 if __name__ == "__main__":
+    g=eg.GraphC()
+    eg.betweenness_centrality(g)
     for f in files:
         print(f"EasyGraph curr file: {f}")
 

@@ -1,4 +1,4 @@
-python3 -m pip uninstall Python-EasyGraph
+python3 -m pip uninstall Python-EasyGraph -y
 rm -rf ./Easy-Graph
 git clone --recursive https://github.com/yo123abxd/Easy-Graph.git
 
