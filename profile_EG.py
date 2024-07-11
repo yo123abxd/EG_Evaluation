@@ -6,7 +6,8 @@ from datasets import files, files_BC, files_Dijkstra, files_k_core
 
 if __name__ == "__main__":
     g=eg.GraphC()
-    eg.betweenness_centrality(g)
+    g.add_edges([(1,2)])
+    eg.betweenness_centrality(g) # to mitigate the overhead of loading the shared library related to GPU functions
     for f in files:
         print(f"EasyGraph curr file: {f}")
 
