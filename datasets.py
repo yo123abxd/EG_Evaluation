@@ -20,7 +20,7 @@ files_k_core = set([
     "amazon0601.txt",
     "email-EuAll.txt",
     "ER-100k.txt",
-    "ER-500k.txt",
+    "wiki-Talk.txt",
     "com-youtube.ungraph.txt",
 ])
 
